@@ -17,10 +17,10 @@ contract PreSaleNFTTest is Test {
         preSaleNFT.doPresale(1 ether);
     }
 
-    function test_presaleInfo() public {
+    function test_presaleInfo(uint256 amount) public {
         preSaleNFT.startPresale(true);
-        preSaleNFT.doPresale(1 ether);
-        assertEq(preSaleNFT.presaleInfo(address(this)), 1 ether);
+        preSaleNFT.doPresale(amount);
+        assertEq(preSaleNFT.presaleInfo(address(this)), amount);
     }
 
     // receive function to receive ETH
