@@ -10,12 +10,10 @@ contract PreSaleNFT is Ownable, ReentrancyGuardTransient, Pausable {
     // custom errors
     error PresaleNotActive();
 
-    address public admin;
     bool public isPresaleActive;
     mapping(address => uint256) public presaleInfo;
 
     constructor(address initialAdmin) Ownable(initialAdmin) {
-        admin = initialAdmin;
         isPresaleActive = false;
     }
 
