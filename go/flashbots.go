@@ -97,7 +97,7 @@ func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, txSignin
 	if err != nil {
 		return err
 	}
-	gasPrice := new(big.Int).Mul(baseGasPrice, big.NewInt(20)) // 10倍基础价格
+	gasPrice := new(big.Int).Mul(baseGasPrice, big.NewInt(20)) // 20倍基础价格
 	minGasPrice := big.NewInt(5000000000)                      // 至少 5 Gwei
 	if gasPrice.Cmp(minGasPrice) < 0 {
 		gasPrice = minGasPrice
