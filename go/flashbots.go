@@ -75,7 +75,7 @@ func checkPresaleState(client *ethclient.Client, contractAddr string) (bool, err
 	return isActive, err
 }
 
-func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, signingKey *ecdsa.PrivateKey) error {
+func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, txSigningKey *ecdsa.PrivateKey, flashbotsSigningKey *ecdsa.PrivateKey) error {
 	// 创建 Flashbots RPC 客户端
 	flashbotsClient := flashbotsrpc.New(flashbotsRPC)
 
@@ -97,7 +97,7 @@ func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, signingK
 	if err != nil {
 		return err
 	}
-	gasPrice := new(big.Int).Mul(baseGasPrice, big.NewInt(10)) // 10倍基础价格
+	gasPrice := new(big.Int).Mul(baseGasPrice, big.NewInt(20)) // 10倍基础价格
 	minGasPrice := big.NewInt(5000000000)                      // 至少 5 Gwei
 	if gasPrice.Cmp(minGasPrice) < 0 {
 		gasPrice = minGasPrice
@@ -108,7 +108,7 @@ func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, signingK
 		targetBlock := blockNum + uint64(i)
 
 		// 获取 nonce
-		nonce, err := client.PendingNonceAt(context.Background(), crypto.PubkeyToAddress(signingKey.PublicKey))
+		nonce, err := client.PendingNonceAt(context.Background(), crypto.PubkeyToAddress(txSigningKey.PublicKey))
 		if err != nil {
 			return err
 		}
@@ -123,8 +123,8 @@ func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, signingK
 			data,
 		)
 
-		// 签名交易
-		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(big.NewInt(11155111)), signingKey)
+		// 使用交易私钥签名交易
+		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(big.NewInt(11155111)), txSigningKey)
 		if err != nil {
 			return err
 		}
@@ -146,8 +146,8 @@ func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, signingK
 			MaxTimestamp: &future,
 		}
 
-		// 发送 bundle
-		bundleResponse, err := flashbotsClient.FlashbotsSendBundle(signingKey, sendBundleArgs)
+		// 使用 Flashbots 私钥发送 bundle
+		bundleResponse, err := flashbotsClient.FlashbotsSendBundle(flashbotsSigningKey, sendBundleArgs)
 		if err != nil {
 			log.Printf("区块 %d 发送失败: %v", targetBlock, err)
 			continue
@@ -178,31 +178,28 @@ func sendFlashbotsBundle(client *ethclient.Client, contractAddr string, signingK
 }
 
 func main() {
-	// 从 .env 文件读取私钥
+	// 1. 读取交易签名私钥
 	privateKeyHex := os.Getenv("PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("PRIVATE_KEY not found in .env file")
 	}
-	// 如果私钥包含 "0x" 前缀，移除它
 	privateKeyHex = strings.TrimPrefix(privateKeyHex, "0x")
+	txSigningKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Fatalf("解析交易私钥失败: %v", err)
+	}
 
-	// 生成 Flashbots 签名私钥
+	// 2. 生成独立的 Flashbots 签名私钥
 	flashbotsSigningKey, err := crypto.GenerateKey()
 	if err != nil {
 		log.Fatalf("生成 Flashbots 签名私钥失败: %v", err)
 	}
-	privateKeyBytes := crypto.FromECDSA(flashbotsSigningKey)
-	fmt.Printf("生成的 Flashbots 签名私钥: 0x%x\n", privateKeyBytes)
+	flashbotsPrivateKeyBytes := crypto.FromECDSA(flashbotsSigningKey)
+	fmt.Printf("生成的 Flashbots 签名私钥: 0x%x\n", flashbotsPrivateKeyBytes)
 
-	// 解析交易账户私钥
-	signingKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Fatalf("解析私钥失败: %v", err)
-	}
-
-	// 打印账户地址（可选，用于确认）
-	address := crypto.PubkeyToAddress(signingKey.PublicKey)
-	fmt.Printf("使用账户地址: %s\n", address.Hex())
+	// 打印交易账户地址
+	txAddress := crypto.PubkeyToAddress(txSigningKey.PublicKey)
+	fmt.Printf("交易账户地址: %s\n", txAddress.Hex())
 
 	// 连接以太坊客户端
 	client, err := ethclient.Dial(sepoliaRPC)
@@ -226,8 +223,8 @@ func main() {
 
 		if !lastState && state {
 			fmt.Println("预售已开启! 准备发送交易...")
-			// 使用 signingKey 来签名交易，使用 flashbotsSigningKey 来发送 bundle
-			err := sendFlashbotsBundle(client, presaleNFTAddr, signingKey) // 这里改用 signingKey
+			// 传入两个不同的私钥
+			err := sendFlashbotsBundle(client, presaleNFTAddr, txSigningKey, flashbotsSigningKey)
 			if err != nil {
 				log.Printf("发送交易失败: %v", err)
 			}
